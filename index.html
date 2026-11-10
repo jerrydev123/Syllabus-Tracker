@@ -1,15 +1,607 @@
-import { Routes, Route } from "react-router-dom";
-import Home from "@/pages/Home";
-import { Toaster } from "@/components/ui/sonner";
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Syllabus Tracker & Planner</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; }
+  </style>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: '#3b82f6'
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen transition-colors">
+  <div class="max-w-6xl mx-auto px-4 py-6 md:py-10">
 
-// One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
-export default function App() {
-  return (
-    <>
-      <Routes>
-        <Route path="/" element={<Home />} />
-      </Routes>
-      <Toaster />
-    </>
-  );
-}
+    <!-- Header -->
+    <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-200 dark:border-slate-800">
+      <div>
+        <h1 class="text-2xl md:text-3xl font-bold tracking-tight">Syllabus Sprint • Nov 30</h1>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" id="subHeaderStatus">Targeting syllabus completion by the end of November</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="openModal('addSubjectModal')" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-sm transition">
+          + Add Subject
+        </button>
+        <button onclick="rebalancePlan()" class="bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium px-3 py-2 rounded-lg transition" title="Redistribute remaining tasks evenly to Nov 30">
+          Rebalance
+        </button>
+        <button onclick="toggleDarkMode()" class="p-2 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 transition" aria-label="Toggle Theme">
+          🌓
+        </button>
+      </div>
+    </header>
+
+    <!-- Progress Overview -->
+    <section class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="md:col-span-2 bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div class="flex justify-between items-center mb-2">
+          <span class="text-sm font-semibold text-slate-600 dark:text-slate-300">Overall Syllabus Progress</span>
+          <span class="text-sm font-bold text-blue-600 dark:text-blue-400" id="progressPercentage">0%</span>
+        </div>
+        <div class="w-full bg-slate-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden">
+          <div id="progressBar" class="bg-blue-600 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+        <div class="flex justify-between items-center mt-3 text-xs text-slate-500 dark:text-slate-400">
+          <span id="completedCounter">0 of 31 chapters completed</span>
+          <span id="daysRemainingCounter">Days Remaining</span>
+        </div>
+      </div>
+
+      <div class="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+        <span class="text-xs uppercase font-semibold tracking-wider text-slate-400">Target Deadline</span>
+        <div class="text-xl font-bold mt-1">November 30</div>
+        <div class="text-xs text-slate-500 dark:text-slate-400 mt-2" id="paceMetric">0 chapters / day pace needed</div>
+      </div>
+    </section>
+
+    <!-- Subject Badges Grid -->
+    <section class="mt-6">
+      <h2 class="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">Subjects Breakdown</h2>
+      <div id="subjectCards" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-4 gap-3"></div>
+    </section>
+
+    <!-- Date Navigation Tabs -->
+    <section class="mt-8">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Select Date</h2>
+        <button onclick="goToToday()" class="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline">Go to Today</button>
+      </div>
+      <div id="dateStrip" class="flex gap-2 overflow-x-auto pb-2 custom-scrollbar"></div>
+    </section>
+
+    <!-- Daily Tasks Area -->
+    <section class="mt-6 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-5 md:p-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+        <div>
+          <h3 class="text-lg font-bold" id="selectedDateTitle">Today's Targets</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400" id="selectedDateSubtitle">Scheduled chapters for this day</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="carryForwardIncomplete()" class="text-xs bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 px-3 py-2 rounded-lg font-medium transition">
+            ↳ Carry Forward Incomplete
+          </button>
+          <button onclick="openModal('addTaskModal')" class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg font-medium transition">
+            + Add Task
+          </button>
+        </div>
+      </div>
+
+      <!-- Task List -->
+      <div id="taskList" class="mt-4 space-y-2"></div>
+    </section>
+
+    <!-- Unassigned Pool Section -->
+    <section id="unassignedSection" class="mt-6 bg-slate-100 dark:bg-slate-900/50 rounded-xl border border-dashed border-slate-300 dark:border-slate-800 p-5 hidden">
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <h4 class="text-sm font-bold">Unassigned Chapters</h4>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Chapters waiting to be scheduled on specific dates</p>
+        </div>
+        <button onclick="distributeUnassigned()" class="text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium">Distribute to Remaining Days</button>
+      </div>
+      <div id="unassignedList" class="flex flex-wrap gap-2"></div>
+    </section>
+
+  </div>
+
+  <!-- Add Subject Modal -->
+  <div id="addSubjectModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white dark:bg-slate-900 rounded-xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800 shadow-xl">
+      <h3 class="text-lg font-bold mb-4">Add New Subject</h3>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Subject Name</label>
+          <input type="text" id="newSubjectName" placeholder="e.g. Sanskrit or Mathematics" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Number of Chapters</label>
+          <input type="number" id="newSubjectChapters" min="1" max="50" value="3" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Badge Color</label>
+          <div class="flex items-center gap-2" id="colorPickerPresets"></div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Scheduling Method</label>
+          <select id="newSubjectScheduling" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm">
+            <option value="auto">Auto-distribute evenly to Nov 30</option>
+            <option value="manual">Keep in Unassigned Pool</option>
+          </select>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-6">
+        <button onclick="closeModal('addSubjectModal')" class="px-4 py-2 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">Cancel</button>
+        <button onclick="saveNewSubject()" class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium">Add Subject</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Task Modal -->
+  <div id="addTaskModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white dark:bg-slate-900 rounded-xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800 shadow-xl">
+      <h3 class="text-lg font-bold mb-4">Add Custom Task</h3>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Task / Chapter Title</label>
+          <input type="text" id="customTaskTitle" placeholder="e.g. Chapter 4 Revision" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Subject</label>
+          <select id="customTaskSubject" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm"></select>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-6">
+        <button onclick="closeModal('addTaskModal')" class="px-4 py-2 text-sm text-slate-500">Cancel</button>
+        <button onclick="saveCustomTask()" class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium">Add to Day</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const INITIAL_SUBJECTS = [
+      { id: 'geo', name: 'Geography', chapters: 3, color: '#f59e0b' },
+      { id: 'hin', name: 'Hindi', chapters: 7, color: '#ef4444' },
+      { id: 'his', name: 'History', chapters: 2, color: '#8b5cf6' },
+      { id: 'civ', name: 'Civics', chapters: 2, color: '#06b6d4' },
+      { id: 'sc1', name: 'Science 1', chapters: 3, color: '#10b981' },
+      { id: 'mar', name: 'Marathi', chapters: 3, color: '#ec4899' },
+      { id: 'eng', name: 'English', chapters: 7, color: '#3b82f6' },
+      { id: 'sc2', name: 'Science 2', chapters: 4, color: '#14b8a6' }
+    ];
+
+    const PRESET_COLORS = ['#3b82f6', '#10b981', '#ef4444', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#64748b'];
+
+    let state = {
+      subjects: [],
+      tasks: [],
+      unassigned: [],
+      selectedDate: ''
+    };
+
+    let selectedColor = PRESET_COLORS[0];
+
+    function init() {
+      const saved = localStorage.getItem('syllabus_planner_state');
+      const todayStr = getTodayStr();
+
+      if (saved) {
+        try {
+          state = JSON.parse(saved);
+        } catch (e) {
+          generateFreshState();
+        }
+      } else {
+        generateFreshState();
+      }
+
+      if (!state.selectedDate) state.selectedDate = todayStr;
+      initColorPresets();
+      renderAll();
+    }
+
+    function getTodayStr() {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    }
+
+    function getDatesRemainingInNovember() {
+      const dates = [];
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth(); // 10 is November (0-indexed)
+
+      const startDay = (month === 10) ? now.getDate() : 1;
+      const daysInNov = 30;
+
+      for (let d = startDay; d <= daysInNov; d++) {
+        dates.push(`${year}-11-${String(d).padStart(2, '0')}`);
+      }
+      return dates.length > 0 ? dates : [getTodayStr()];
+    }
+
+    function generateFreshState() {
+      state.subjects = [...INITIAL_SUBJECTS];
+      state.tasks = [];
+      state.unassigned = [];
+      state.selectedDate = getTodayStr();
+
+      const dates = getDatesRemainingInNovember();
+      const allTasks = [];
+
+      state.subjects.forEach(sub => {
+        for (let i = 1; i <= sub.chapters; i++) {
+          allTasks.push({
+            id: `${sub.id}-ch-${i}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            subjectId: sub.id,
+            title: `Chapter ${i}`,
+            completed: false,
+            date: ''
+          });
+        }
+      });
+
+      // Distribute evenly across remaining dates
+      allTasks.forEach((task, index) => {
+        const assignedDate = dates[index % dates.length];
+        task.date = assignedDate;
+        state.tasks.push(task);
+      });
+
+      save();
+    }
+
+    function save() {
+      localStorage.setItem('syllabus_planner_state', JSON.stringify(state));
+      renderAll();
+    }
+
+    function renderAll() {
+      renderProgress();
+      renderSubjectCards();
+      renderDateStrip();
+      renderTasks();
+      renderUnassigned();
+    }
+
+    function renderProgress() {
+      const total = state.tasks.length + state.unassigned.length;
+      const completed = state.tasks.filter(t => t.completed).length;
+      const pct = total === 0 ? 0 : Math.round((completed / total) * 100);
+
+      document.getElementById('progressPercentage').innerText = `${pct}%`;
+      document.getElementById('progressBar').style.width = `${pct}%`;
+      document.getElementById('completedCounter').innerText = `${completed} of ${total} chapters completed`;
+
+      const now = new Date();
+      const nov30 = new Date(now.getFullYear(), 10, 30);
+      const diffTime = nov30 - now;
+      const diffDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+      document.getElementById('daysRemainingCounter').innerText = `${diffDays} days left`;
+
+      const remainingChapters = total - completed;
+      const pace = (remainingChapters / diffDays).toFixed(1);
+      document.getElementById('paceMetric').innerText = `${pace} chapters / day to finish by Nov 30`;
+    }
+
+    function renderSubjectCards() {
+      const container = document.getElementById('subjectCards');
+      container.innerHTML = '';
+
+      state.subjects.forEach(sub => {
+        const subTasks = state.tasks.filter(t => t.subjectId === sub.id);
+        const subCompleted = subTasks.filter(t => t.completed).length;
+        const totalSub = subTasks.length + state.unassigned.filter(u => u.subjectId === sub.id).length;
+        const subPct = totalSub === 0 ? 0 : Math.round((subCompleted / totalSub) * 100);
+
+        const card = document.createElement('div');
+        card.className = "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-lg shadow-sm";
+        card.innerHTML = `
+          <div class="flex items-center gap-2 mb-1">
+            <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${sub.color}"></span>
+            <span class="font-medium text-xs truncate">${sub.name}</span>
+          </div>
+          <div class="flex justify-between text-xs text-slate-500 mb-1">
+            <span>${subCompleted}/${totalSub}</span>
+            <span>${subPct}%</span>
+          </div>
+          <div class="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+            <div class="h-full rounded-full" style="width: ${subPct}%; background-color: ${sub.color}"></div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function renderDateStrip() {
+      const strip = document.getElementById('dateStrip');
+      strip.innerHTML = '';
+      const dates = getDatesRemainingInNovember();
+
+      dates.forEach(dateStr => {
+        const d = new Date(dateStr + 'T00:00:00');
+        const dayNum = d.getDate();
+        const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+        const isSelected = state.selectedDate === dateStr;
+
+        const tasksForDate = state.tasks.filter(t => t.date === dateStr);
+        const allDone = tasksForDate.length > 0 && tasksForDate.every(t => t.completed);
+
+        const btn = document.createElement('button');
+        btn.onclick = () => { state.selectedDate = dateStr; save(); };
+        btn.className = `flex-shrink-0 flex flex-col items-center justify-center w-14 py-2 rounded-xl text-xs font-medium border transition ${
+          isSelected 
+            ? 'bg-blue-600 text-white border-blue-600 shadow-sm' 
+            : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-slate-300'
+        }`;
+        btn.innerHTML = `
+          <span class="text-[10px] ${isSelected ? 'text-blue-100' : 'text-slate-400'}">${dayName}</span>
+          <span class="text-base font-bold my-0.5">${dayNum}</span>
+          <span class="w-1.5 h-1.5 rounded-full ${allDone ? 'bg-emerald-400' : tasksForDate.length ? (isSelected ? 'bg-white' : 'bg-blue-500') : 'bg-transparent'}"></span>
+        `;
+        strip.appendChild(btn);
+      });
+    }
+
+    function renderTasks() {
+      const container = document.getElementById('taskList');
+      container.innerHTML = '';
+
+      const d = new Date(state.selectedDate + 'T00:00:00');
+      document.getElementById('selectedDateTitle').innerText = `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'long' })}`;
+
+      const currentTasks = state.tasks.filter(t => t.date === state.selectedDate);
+
+      if (currentTasks.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-8 text-slate-400 text-sm">
+            No targets scheduled for this date. Click "+ Add Task" or rebalance.
+          </div>
+        `;
+        return;
+      }
+
+      currentTasks.forEach(task => {
+        const sub = state.subjects.find(s => s.id === task.subjectId) || { name: 'General', color: '#64748b' };
+        const row = document.createElement('div');
+        row.className = `flex items-center justify-between p-3 rounded-lg border transition ${
+          task.completed 
+            ? 'bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800/60 opacity-60' 
+            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+        }`;
+        row.innerHTML = `
+          <div class="flex items-center gap-3">
+            <input type="checkbox" ${task.completed ? 'checked' : ''} onchange="toggleTask('${task.id}')" class="w-5 h-5 rounded text-blue-600 focus:ring-0 cursor-pointer" />
+            <div>
+              <span class="inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full mr-2 text-white" style="background-color: ${sub.color}">${sub.name}</span>
+              <span class="text-sm font-medium ${task.completed ? 'line-through text-slate-400' : ''}">${task.title}</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-1">
+            <button onclick="rescheduleTaskPrompt('${task.id}')" class="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1" title="Move Date">📅</button>
+            <button onclick="deleteTask('${task.id}')" class="text-xs text-rose-400 hover:text-rose-600 p-1" title="Delete">✕</button>
+          </div>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    function renderUnassigned() {
+      const container = document.getElementById('unassignedList');
+      const section = document.getElementById('unassignedSection');
+
+      if (state.unassigned.length === 0) {
+        section.classList.add('hidden');
+        return;
+      }
+
+      section.classList.remove('hidden');
+      container.innerHTML = '';
+
+      state.unassigned.forEach(task => {
+        const sub = state.subjects.find(s => s.id === task.subjectId) || { name: 'General', color: '#64748b' };
+        const badge = document.createElement('div');
+        badge.className = "flex items-center gap-2 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs shadow-sm";
+        badge.innerHTML = `
+          <span class="w-2 h-2 rounded-full" style="background-color: ${sub.color}"></span>
+          <span><strong>${sub.name}:</strong> ${task.title}</span>
+          <button onclick="assignToCurrentDate('${task.id}')" class="text-blue-600 dark:text-blue-400 font-bold ml-1 hover:underline">+ Assign</button>
+        `;
+        container.appendChild(badge);
+      });
+    }
+
+    function toggleTask(id) {
+      const task = state.tasks.find(t => t.id === id);
+      if (task) {
+        task.completed = !task.completed;
+        save();
+      }
+    }
+
+    function carryForwardIncomplete() {
+      const currentIncomplete = state.tasks.filter(t => t.date === state.selectedDate && !t.completed);
+      if (currentIncomplete.length === 0) {
+        alert('No incomplete tasks for this day to carry forward.');
+        return;
+      }
+
+      const d = new Date(state.selectedDate + 'T00:00:00');
+      d.setDate(d.getDate() + 1);
+      const nextDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+      currentIncomplete.forEach(t => t.date = nextDateStr);
+      state.selectedDate = nextDateStr;
+      save();
+    }
+
+    function rebalancePlan() {
+      const incompleteTasks = state.tasks.filter(t => !t.completed);
+      if (incompleteTasks.length === 0) {
+        alert('All tasks completed! Nothing to rebalance.');
+        return;
+      }
+
+      const dates = getDatesRemainingInNovember();
+      incompleteTasks.forEach((task, idx) => {
+        task.date = dates[idx % dates.length];
+      });
+      save();
+    }
+
+    function distributeUnassigned() {
+      const dates = getDatesRemainingInNovember();
+      state.unassigned.forEach((task, idx) => {
+        task.date = dates[idx % dates.length];
+        state.tasks.push(task);
+      });
+      state.unassigned = [];
+      save();
+    }
+
+    function assignToCurrentDate(id) {
+      const idx = state.unassigned.findIndex(t => t.id === id);
+      if (idx > -1) {
+        const task = state.unassigned.splice(idx, 1)[0];
+        task.date = state.selectedDate;
+        state.tasks.push(task);
+        save();
+      }
+    }
+
+    function rescheduleTaskPrompt(id) {
+      const targetDate = prompt('Enter date (YYYY-MM-DD):', state.selectedDate);
+      if (targetDate && /^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
+        const t = state.tasks.find(x => x.id === id);
+        if (t) {
+          t.date = targetDate;
+          save();
+        }
+      }
+    }
+
+    function deleteTask(id) {
+      if (confirm('Delete this task?')) {
+        state.tasks = state.tasks.filter(t => t.id !== id);
+        save();
+      }
+    }
+
+    function saveNewSubject() {
+      const name = document.getElementById('newSubjectName').value.trim();
+      const count = parseInt(document.getElementById('newSubjectChapters').value) || 1;
+      const method = document.getElementById('newSubjectScheduling').value;
+
+      if (!name) return;
+
+      const newSub = {
+        id: 'sub-' + Date.now(),
+        name: name,
+        chapters: count,
+        color: selectedColor
+      };
+
+      state.subjects.push(newSub);
+
+      const dates = getDatesRemainingInNovember();
+      for (let i = 1; i <= count; i++) {
+        const task = {
+          id: `${newSub.id}-ch-${i}-${Date.now()}`,
+          subjectId: newSub.id,
+          title: `Chapter ${i}`,
+          completed: false,
+          date: ''
+        };
+
+        if (method === 'auto') {
+          task.date = dates[i % dates.length];
+          state.tasks.push(task);
+        } else {
+          state.unassigned.push(task);
+        }
+      }
+
+      closeModal('addSubjectModal');
+      document.getElementById('newSubjectName').value = '';
+      save();
+    }
+
+    function saveCustomTask() {
+      const title = document.getElementById('customTaskTitle').value.trim();
+      const subId = document.getElementById('customTaskSubject').value;
+      if (!title) return;
+
+      state.tasks.push({
+        id: 'custom-' + Date.now(),
+        subjectId: subId,
+        title: title,
+        completed: false,
+        date: state.selectedDate
+      });
+
+      closeModal('addTaskModal');
+      document.getElementById('customTaskTitle').value = '';
+      save();
+    }
+
+    function initColorPresets() {
+      const container = document.getElementById('colorPickerPresets');
+      container.innerHTML = '';
+      PRESET_COLORS.forEach(c => {
+        const d = document.createElement('button');
+        d.className = `w-6 h-6 rounded-full border-2 transition ${selectedColor === c ? 'border-black dark:border-white scale-110' : 'border-transparent'}`;
+        d.style.backgroundColor = c;
+        d.onclick = () => {
+          selectedColor = c;
+          initColorPresets();
+        };
+        container.appendChild(d);
+      });
+    }
+
+    function openModal(id) {
+      if (id === 'addTaskModal') {
+        const select = document.getElementById('customTaskSubject');
+        select.innerHTML = '';
+        state.subjects.forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s.id;
+          opt.innerText = s.name;
+          select.appendChild(opt);
+        });
+      }
+      document.getElementById(id).classList.remove('hidden');
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.add('hidden');
+    }
+
+    function goToToday() {
+      state.selectedDate = getTodayStr();
+      save();
+    }
+
+    function toggleDarkMode() {
+      document.documentElement.classList.toggle('dark');
+    }
+
+    init();
+  </script>
+</body>
+</html>
